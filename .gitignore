@@ -1,0 +1,24 @@
+# Gradle / build output
+.gradle/
+build/
+.kotlin/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.hprof
+
+# Machine-specific
+local.properties
+
+# Signing secrets (see keystore.properties.example)
+keystore.properties
+*.jks
+*.keystore
+
+# IDEs / OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
