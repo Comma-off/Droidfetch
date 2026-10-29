@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -19,6 +20,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -33,7 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.droid.fetch.data.StorageBreakdown
 import com.droid.fetch.data.formatBytes
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.SmallTitle
+import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -42,32 +45,22 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 data class StorageUsage(val breakdown: StorageBreakdown?)
 
 /**
- * Storage split by category, like Settings › Storage: one segmented bar and a legend. Without
- * Usage access it offers to open the setting instead.
+ * The Hardware tab's storage card: headline size, a bar and a breakdown by category, like
+ * Settings › Storage. Without Usage access it still shows used/free from the filesystem, with a
+ * row offering to open the setting.
+ *
+ * [total] and [free] are the filesystem's numbers, used until (or unless) categories are known.
  */
 @Composable
-fun StorageUsageCard(usage: StorageUsage) {
+fun StorageCard(usage: StorageUsage?, headline: String, total: Long, free: Long, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val cs = MiuixTheme.colorScheme
-    SmallTitle("Storage usage")
-    Card(Modifier.padding(horizontal = 12.dp).padding(bottom = 12.dp)) {
-        val b = usage.breakdown
-        if (b == null) {
-            ArrowPreference(
-                title = "Show storage by category",
-                summary = "Allow Usage access to see how much apps, photos, videos and audio take up",
-                onClick = {
-                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                        .setData(Uri.fromParts("package", context.packageName, null))
-                    runCatching { context.startActivity(intent) }
-                        .onFailure { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
-                },
-            )
-            return@Card
-        }
-
-        val palette = remember(cs.primary) { categoryColors(cs.primary) }
-        val parts = listOf(
+    val b = usage?.breakdown
+    val palette = remember(cs.primary) { categoryColors(cs.primary) }
+    val parts = if (b == null) {
+        listOf(Triple("Used", total - free, cs.primary))
+    } else {
+        listOf(
             Triple("Apps", b.apps, palette[0]),
             Triple("Images", b.images, palette[1]),
             Triple("Videos", b.videos, palette[2]),
@@ -75,32 +68,56 @@ fun StorageUsageCard(usage: StorageUsage) {
             Triple("Other files", b.other, palette[4]),
             Triple("System", b.system, palette[5]),
         )
-        Box(Modifier.padding(16.dp)) {
-            androidx.compose.foundation.layout.Column {
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text(formatBytes(b.total - b.free), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = cs.onSurface)
-                    Spacer(Modifier.width(6.dp))
-                    Text("used of ${formatBytes(b.total)}", style = MiuixTheme.textStyles.body2, color = cs.onSurfaceVariantSummary, modifier = Modifier.padding(bottom = 3.dp))
-                }
-                Spacer(Modifier.height(12.dp))
-                // Segmented bar; free space is the track showing through.
-                Row(
+    }
+    val shownTotal = b?.total ?: total
+    val shownFree = b?.free ?: free
+
+    Card(modifier) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
                     Modifier
-                        .fillMaxWidth()
-                        .height(12.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(cs.primary.copy(alpha = 0.12f)),
-                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        .size(30.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(cs.primary.copy(alpha = 0.14f)),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    for ((_, bytes, color) in parts) {
-                        val w = bytes.toFloat() / b.total
-                        if (w > 0.002f) Box(Modifier.weight(w).fillMaxHeight().background(color))
-                    }
-                    val free = b.free.toFloat() / b.total
-                    if (free > 0.002f) Spacer(Modifier.weight(free))
+                    Icon(Icons.Outlined.SdStorage, contentDescription = null, tint = cs.primary, modifier = Modifier.size(18.dp))
                 }
+                Spacer(Modifier.width(10.dp))
+                Text("Storage", style = MiuixTheme.textStyles.body2, color = cs.onSurfaceVariantSummary)
+            }
+            Spacer(Modifier.height(14.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(headline, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = cs.onSurface)
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "${formatBytes(shownTotal - shownFree)} used · ${formatBytes(shownFree)} free",
+                    style = MiuixTheme.textStyles.body2,
+                    color = cs.onSurfaceVariantSummary,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            // Segmented bar; free space is the track showing through.
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(12.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(cs.primary.copy(alpha = 0.12f)),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                for ((_, bytes, color) in parts) {
+                    val w = bytes.toFloat() / shownTotal
+                    if (w > 0.002f) Box(Modifier.weight(w).fillMaxHeight().background(color))
+                }
+                val freeW = shownFree.toFloat() / shownTotal
+                if (freeW > 0.002f) Spacer(Modifier.weight(freeW))
+            }
+            if (b != null) {
                 Spacer(Modifier.height(14.dp))
-                for ((label, bytes, color) in parts + Triple("Free", b.free, cs.primary.copy(alpha = 0.18f))) {
+                for ((label, bytes, color) in parts) {
                     Row(Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.size(10.dp).clip(CircleShape).background(color))
                         Spacer(Modifier.width(10.dp))
@@ -117,6 +134,18 @@ fun StorageUsageCard(usage: StorageUsage) {
                     color = cs.onSurfaceVariantSummary,
                 )
             }
+        }
+        if (b == null) {
+            ArrowPreference(
+                title = "Show storage by category",
+                summary = "Allow Usage access to see how much apps, photos, videos and audio take up",
+                onClick = {
+                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                        .setData(Uri.fromParts("package", context.packageName, null))
+                    runCatching { context.startActivity(intent) }
+                        .onFailure { context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+                },
+            )
         }
     }
 }

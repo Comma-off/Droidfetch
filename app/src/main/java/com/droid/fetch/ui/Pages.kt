@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Memory
 import androidx.compose.material.icons.outlined.PhoneAndroid
-import androidx.compose.material.icons.outlined.SdStorage
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -68,33 +67,29 @@ fun HardwarePage(info: StaticInfo?, live: LiveStats?, storage: StorageUsage?, se
     PageScaffold(title = "Hardware", actions = { ShareAction(onShare) }) {
         if (info == null) return@PageScaffold
         if (live != null) {
-            item(key = "tiles") {
-                Row(Modifier.padding(horizontal = 12.dp).padding(top = 4.dp, bottom = 6.dp), horizontalArrangement = CardSpacing) {
-                    UsageTile(
-                        icon = Icons.Outlined.Memory,
-                        title = "RAM",
-                        headline = "${info.ramMarketedGb} GB",
-                        used = live.memTotal - live.memAvail,
-                        total = live.memTotal,
-                        modifier = Modifier.weight(1f),
-                    )
-                    UsageTile(
-                        icon = Icons.Outlined.SdStorage,
-                        title = "Storage",
-                        headline = formatMarketedStorage(info.storageMarketedBytes),
-                        used = live.storageTotal - live.storageFree,
-                        total = live.storageTotal,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+            item(key = "ram") {
+                UsageTile(
+                    icon = Icons.Outlined.Memory,
+                    title = "RAM",
+                    headline = "${info.ramMarketedGb} GB",
+                    used = live.memTotal - live.memAvail,
+                    total = live.memTotal,
+                    modifier = Modifier.padding(horizontal = 12.dp).padding(top = 4.dp, bottom = 12.dp).fillMaxWidth(),
+                )
+            }
+            item(key = "storage-card") {
+                // Sized like Settings: the advertised total, with free space from the filesystem.
+                StorageCard(
+                    usage = storage,
+                    headline = formatMarketedStorage(info.storageMarketedBytes),
+                    total = info.storageMarketedBytes,
+                    free = live.storageFree,
+                    modifier = Modifier.padding(horizontal = 12.dp).padding(bottom = 6.dp),
+                )
             }
             item(key = "cpu") { CpuCard(info, live) }
         }
-        // The category breakdown sits right above the filesystem details it belongs with.
-        val (before, after) = info.hardware.partition { it.title != "Storage" }
-        infoSections(before)
-        storage?.let { item(key = "storage-usage") { StorageUsageCard(it) } }
-        infoSections(after)
+        infoSections(info.hardware)
         live?.memorySection()?.let { s -> item(key = "memory") { InfoSectionCard(s) } }
         live?.batterySection(settings.tempUnit)?.let { s -> item(key = "battery") { InfoSectionCard(s) } }
         live?.let { l -> thermalSection(l.thermal, l.battery?.tempC, settings.tempUnit) }
