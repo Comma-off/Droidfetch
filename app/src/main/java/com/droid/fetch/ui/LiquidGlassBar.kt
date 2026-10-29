@@ -276,7 +276,7 @@ fun LiquidGlassBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(if (showLabels) 24.dp else 26.dp))
+                    Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(if (showLabels) 24.dp else FloatingIconOnlySize))
                     if (showLabels) {
                         Text(
                             text = tab.label,

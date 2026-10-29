@@ -6,6 +6,12 @@ package com.droid.fetch.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
+import top.yukonga.miuix.kmp.basic.NavigationBarDefaults
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -58,7 +64,14 @@ data class Tab(val label: String, val icon: ImageVector)
 
 private val Capsule = RoundedCornerShape(50)
 
-/** The stock miuix bottom bar. */
+/** Icon size when labels are hidden: the freed space goes to bigger icons. */
+private val ClassicIconOnlySize = 32.dp
+internal val FloatingIconOnlySize = 30.dp
+
+/**
+ * The stock miuix bottom bar. miuix draws icon-only items at its fixed 26 dp, so without labels
+ * the items are drawn here instead, at [ClassicIconOnlySize] with miuix's colours and press dimming.
+ */
 @Composable
 fun ClassicBottomBar(tabs: List<Tab>, pager: PagerState, showLabels: Boolean, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
@@ -67,13 +80,37 @@ fun ClassicBottomBar(tabs: List<Tab>, pager: PagerState, showLabels: Boolean, mo
         mode = if (showLabels) NavigationBarDisplayMode.IconAndText else NavigationBarDisplayMode.IconOnly,
     ) {
         tabs.forEachIndexed { i, tab ->
-            NavigationBarItem(
-                selected = pager.targetPage == i,
-                onClick = { scope.launch { pager.animateScrollToPage(i) } },
-                icon = tab.icon,
-                label = tab.label,
-            )
+            val selected = pager.targetPage == i
+            val onClick: () -> Unit = { scope.launch { pager.animateScrollToPage(i) } }
+            if (showLabels) {
+                NavigationBarItem(selected = selected, onClick = onClick, icon = tab.icon, label = tab.label)
+            } else {
+                IconOnlyItem(tab, selected, onClick)
+            }
         }
+    }
+}
+
+@Composable
+private fun RowScope.IconOnlyItem(tab: Tab, selected: Boolean, onClick: () -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val base = MiuixTheme.colorScheme.onSurfaceContainer
+    // Same alphas as miuix's NavigationBarItem.
+    val alpha = when {
+        pressed && selected -> 0.5f
+        pressed -> 0.6f * 0.4f
+        selected -> 1f
+        else -> 0.4f
+    }
+    Box(
+        Modifier
+            .weight(1f)
+            .height(NavigationBarDefaults.ItemHeight)
+            .selectable(selected = selected, onClick = onClick, role = Role.Tab, interactionSource = interaction, indication = null),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(tab.icon, contentDescription = tab.label, tint = base.copy(alpha = base.alpha * alpha), modifier = Modifier.size(ClassicIconOnlySize))
     }
 }
 
@@ -190,7 +227,7 @@ fun FloatingBottomBar(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(if (showLabels) 24.dp else 26.dp))
+                    Icon(tab.icon, contentDescription = tab.label, tint = tint, modifier = Modifier.size(if (showLabels) 24.dp else FloatingIconOnlySize))
                     if (showLabels) {
                         Text(
                             text = tab.label,
