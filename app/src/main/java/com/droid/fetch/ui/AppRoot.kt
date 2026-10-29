@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Comma
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.droid.fetch.ui
 
 import android.content.Context
@@ -41,6 +44,8 @@ import com.droid.fetch.data.StaticInfo
 import com.droid.fetch.data.batterySection
 import com.droid.fetch.data.glassBar
 import com.droid.fetch.data.memorySection
+import com.droid.fetch.data.storageBreakdown
+import com.droid.fetch.data.thermalSection
 import com.droid.fetch.data.toReport
 import com.droid.fetch.data.uptimeSection
 import com.kyant.backdrop.backdrops.layerBackdrop
@@ -69,6 +74,7 @@ fun AppRoot(app: DroidfetchApp) {
 
         val info by produceState<StaticInfo?>(null) { value = app.info.static() }
         val live by liveStats(app, settings.liveUpdates)
+        val storage by storageUsage(context)
         val share = { info?.let { shareReport(context, it, live) } ?: Unit }
 
         // Back from another tab returns to System before leaving the app.
@@ -105,7 +111,7 @@ fun AppRoot(app: DroidfetchApp) {
                 ) { page ->
                     when (page) {
                         0 -> SystemPage(info, live, share)
-                        1 -> HardwarePage(info, live, settings, share)
+                        1 -> HardwarePage(info, live, storage, settings, share)
                         2 -> OtherPage(info, share)
                         else -> SettingsPage(settings, app.settings::update, share)
                     }
@@ -114,14 +120,29 @@ fun AppRoot(app: DroidfetchApp) {
                 val barModifier = Modifier
                     .align(Alignment.BottomCenter)
                     .onSizeChanged { barHeight = with(density) { it.height.toDp() } + if (settings.floatingBar) 14.dp else 0.dp }
-                if (settings.floatingBar) {
-                    FloatingBottomBar(settings.glassBar, pageBackdrop, Tabs, pager, settings.showLabels, barModifier)
+                if (settings.glassBar) {
+                    LiquidGlassBar(pageBackdrop, Tabs, pager, settings.showLabels, barModifier)
+                } else if (settings.floatingBar) {
+                    FloatingBottomBar(Tabs, pager, settings.showLabels, barModifier)
                 } else {
                     ClassicBottomBar(Tabs, pager, settings.showLabels, barModifier)
                 }
             }
         }
     }
+}
+
+/** Storage categories, reread on every resume so granting Usage access shows up right away. */
+@Composable
+private fun storageUsage(context: Context): androidx.compose.runtime.State<StorageUsage?> {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val state = remember { mutableStateOf<StorageUsage?>(null) }
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            state.value = withContext(Dispatchers.IO) { StorageUsage(storageBreakdown(context)) }
+        }
+    }
+    return state
 }
 
 /** Polls live stats while the app is resumed; once per resume when live updates are off. */
@@ -151,7 +172,12 @@ private fun shareReport(context: Context, info: StaticInfo, live: LiveStats?) {
         info.gpuRenderer?.let { appendLine("GPU:     $it") }
         appendLine("RAM:     ${info.ramMarketedGb} GB")
     }
-    val liveSections = listOfNotNull(live?.memorySection(), live?.batterySection(com.droid.fetch.data.TempUnit.Celsius), live?.uptimeSection())
+    val liveSections = listOfNotNull(
+        live?.memorySection(),
+        live?.batterySection(com.droid.fetch.data.TempUnit.Celsius),
+        live?.let { thermalSection(it.thermal, it.battery?.tempC, com.droid.fetch.data.TempUnit.Celsius) },
+        live?.uptimeSection(),
+    )
     val text = header + "\n" + (info.system + info.hardware + liveSections + info.other).toReport()
     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
     context.startActivity(Intent.createChooser(send, "Share device report"))

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Comma
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.droid.fetch.ui
 
 import androidx.compose.animation.core.animateFloatAsState
@@ -41,14 +44,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.kyant.backdrop.Backdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
-import com.kyant.backdrop.drawBackdrop
-import com.kyant.backdrop.effects.blur
-import com.kyant.backdrop.effects.lens
-import com.kyant.backdrop.effects.vibrancy
-import com.kyant.backdrop.highlight.Highlight
-import com.kyant.backdrop.shadow.Shadow
 import kotlinx.coroutines.launch
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.NavigationBar
@@ -83,17 +78,14 @@ fun ClassicBottomBar(tabs: List<Tab>, pager: PagerState, showLabels: Boolean, mo
 }
 
 /**
- * Floating capsule bar. With [glass] on it's the Liquid Glass bar, after the KernelSU manager's
- * miuix design: it refracts and blurs the page behind it ([backdrop]) and a clear glass "drop"
- * marks the current tab. With [glass] off it's a solid capsule with a tinted pill.
+ * Floating capsule bar: a solid capsule with a tinted pill marking the current tab.
+ * The glass version is [LiquidGlassBar].
  *
  * The indicator follows the pager's scroll position, so swiping pages slides it continuously.
  * Dragging it scrolls the pager directly and it swells while held, like pressing on liquid.
  */
 @Composable
 fun FloatingBottomBar(
-    glass: Boolean,
-    backdrop: Backdrop,
     tabs: List<Tab>,
     pager: PagerState,
     showLabels: Boolean,
@@ -118,10 +110,6 @@ fun FloatingBottomBar(
         label = "swell",
     )
     val position = (pager.currentPage + pager.currentPageOffsetFraction).coerceIn(0f, (tabs.size - 1).toFloat())
-
-    // The bar's own glass, exported so the drop refracts the bar (tint, icons' backdrop) and not
-    // just the page, which is what gives it the "drop of water on glass" look.
-    val barGlass = rememberLayerBackdrop()
 
     Box(
         modifier
@@ -168,61 +156,22 @@ fun FloatingBottomBar(
             .offset { IntOffset((insetPx + position * itemWidthPx).roundToInt(), insetPx.roundToInt()) }
             .size(width = itemWidth, height = barHeight - inset * 2)
 
-        if (glass) {
-            // Bar body: blurred, saturated and refracted at the rim.
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .drawBackdrop(
-                        backdrop = backdrop,
-                        shape = { Capsule },
-                        effects = {
-                            vibrancy()
-                            blur(3.dp.toPx())
-                            lens(18.dp.toPx(), 36.dp.toPx())
-                        },
-                        highlight = { Highlight.Default.copy(alpha = if (dark) 0.6f else 0.9f) },
-                        shadow = { Shadow(radius = 20.dp, color = Color.Black.copy(alpha = if (dark) 0.35f else 0.12f)) },
-                        exportedBackdrop = barGlass,
-                        onDrawSurface = { drawRect(cs.surfaceContainer.copy(alpha = if (dark) 0.45f else 0.55f)) },
-                    ),
-            )
-
-            // The drop.
-            Box(
-                indicatorModifier.drawBackdrop(
-                    backdrop = barGlass,
-                    shape = { Capsule },
-                    effects = {
-                        lens(12.dp.toPx(), 22.dp.toPx(), depthEffect = true, chromaticAberration = true)
-                    },
-                    highlight = { Highlight.Default.copy(alpha = if (dark) 0.7f else 1f) },
-                    shadow = { Shadow(radius = 10.dp, color = Color.Black.copy(alpha = if (dark) 0.25f else 0.08f)) },
-                    layerBlock = {
-                        scaleX = swell
-                        scaleY = swell
-                    },
-                    onDrawSurface = { drawRect(cs.primary.copy(alpha = if (dark) 0.20f else 0.12f)) },
-                ),
-            )
-        } else {
-            // Solid capsule, as miuix's own FloatingNavigationBar draws it.
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .shadow(if (dark) 0.dp else 10.dp, Capsule, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f))
-                    .background(cs.surfaceContainer, Capsule)
-                    .then(if (dark) Modifier.border(0.6.dp, Color.White.copy(alpha = 0.08f), Capsule) else Modifier),
-            )
-            Box(
-                indicatorModifier
-                    .graphicsLayer {
-                        scaleX = swell
-                        scaleY = swell
-                    }
-                    .background(cs.primary.copy(alpha = if (dark) 0.22f else 0.12f), Capsule),
-            )
-        }
+        // Solid capsule, as miuix's own FloatingNavigationBar draws it.
+        Box(
+            Modifier
+                .matchParentSize()
+                .shadow(if (dark) 0.dp else 10.dp, Capsule, ambientColor = Color.Black.copy(alpha = 0.3f), spotColor = Color.Black.copy(alpha = 0.3f))
+                .background(cs.surfaceContainer, Capsule)
+                .then(if (dark) Modifier.border(0.6.dp, Color.White.copy(alpha = 0.08f), Capsule) else Modifier),
+        )
+        Box(
+            indicatorModifier
+                .graphicsLayer {
+                    scaleX = swell
+                    scaleY = swell
+                }
+                .background(cs.primary.copy(alpha = if (dark) 0.22f else 0.12f), Capsule),
+        )
 
         Row(
             Modifier

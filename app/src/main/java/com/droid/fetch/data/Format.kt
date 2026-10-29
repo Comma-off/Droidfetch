@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Comma
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.droid.fetch.data
 
 import java.time.Instant
@@ -24,14 +27,14 @@ fun formatIsoDateShort(iso: String?): String? = iso?.let {
 fun formatEpoch(millis: Long): String =
     Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).format(mediumDateTime)
 
-/** Binary units, shown the way Android Settings shows them ("7.4 GB"). */
+/** Decimal units (1 GB = 10⁹ bytes), as Android Settings has shown sizes since Android 8. */
 fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val units = listOf("KB", "MB", "GB", "TB")
+    if (bytes < 1000) return "$bytes B"
+    val units = listOf("kB", "MB", "GB", "TB")
     var value = bytes.toDouble()
     var unit = -1
-    while (value >= 1024 && unit < units.lastIndex) {
-        value /= 1024
+    while (value >= 1000 && unit < units.lastIndex) {
+        value /= 1000
         unit++
     }
     return String.format(Locale.getDefault(), if (value >= 100) "%.0f %s" else "%.1f %s", value, units[unit])

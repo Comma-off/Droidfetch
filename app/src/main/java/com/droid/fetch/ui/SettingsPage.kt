@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Comma
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.droid.fetch.ui
 
 import android.content.Intent
@@ -122,6 +125,15 @@ fun SettingsPage(settings: AppSettings, update: ((AppSettings) -> AppSettings) -
         group("About") {
             BasicComponent(title = "Droidfetch", summary = "Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             BasicComponent(title = "Built with", summary = "miuix · Kyant Backdrop · Jetpack Compose")
+            BasicComponent(
+                title = "Android robot",
+                summary = "Reproduced or modified from work created and shared by Google and used according to terms described in the Creative Commons 3.0 Attribution License.",
+            )
+            ArrowPreference(
+                title = "License",
+                summary = "GNU GPL v3 or later",
+                onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.gnu.org/licenses/gpl-3.0.html"))) },
+            )
             ArrowPreference(
                 title = "App info",
                 onClick = {

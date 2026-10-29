@@ -1,8 +1,9 @@
+// SPDX-FileCopyrightText: 2026 Comma
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.droid.fetch.ui
 
-import android.content.Intent
 import android.os.Build
-import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -35,7 +37,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -53,13 +54,14 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
  * version card: a soft aurora wash in the theme's colors, an oversized glassy version numeral,
  * the release name beneath it and a strip of key facts along the bottom.
  *
- * Tapping it three times opens the platform Easter egg, as tapping the version in Settings does.
+ * Tapping it three times opens the version-bubbles Easter egg, as tapping the version in
+ * Settings opens Android's own.
  */
 @Composable
 fun AndroidVersionCard(version: AndroidVersion, modifier: Modifier = Modifier) {
     val cs = MiuixTheme.colorScheme
     val dark = cs.surface.luminance() < 0.5f
-    val context = LocalContext.current
+    var showEgg by remember { mutableStateOf(false) }
     var taps by remember { mutableIntStateOf(0) }
     var lastTap by remember { mutableLongStateOf(0L) }
 
@@ -80,10 +82,12 @@ fun AndroidVersionCard(version: AndroidVersion, modifier: Modifier = Modifier) {
                 lastTap = now
                 if (taps >= 3) {
                     taps = 0
-                    openEasterEgg(context)
+                    showEgg = true
                 }
             },
     ) {
+        if (showEgg) VersionEasterEgg(version) { showEgg = false }
+
         Aurora(accent = accent, second = glow2, third = accentLight, dark = dark, modifier = Modifier.matchParentSize())
 
         Column(
@@ -246,12 +250,4 @@ private fun FactStrip(facts: List<Pair<String, String>>, dark: Boolean) {
             }
         }
     }
-}
-
-private fun openEasterEgg(context: android.content.Context) {
-    val intent = Intent(Intent.ACTION_MAIN)
-        .setClassName("android", "com.android.internal.app.PlatLogoActivity")
-        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    runCatching { context.startActivity(intent) }
-        .onFailure { Toast.makeText(context, "Android ${Build.VERSION.RELEASE}", Toast.LENGTH_SHORT).show() }
 }

@@ -35,6 +35,11 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Installs next to the release build, which is signed with a different key.
+            applicationIdSuffix = ".debug"
+            versionNameSuffix = "-debug"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

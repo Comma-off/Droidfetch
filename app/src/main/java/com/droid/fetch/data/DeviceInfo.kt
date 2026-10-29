@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Comma
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.droid.fetch.data
 
 import android.app.ActivityManager
@@ -8,8 +11,6 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
 import android.hardware.display.DisplayManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -85,10 +86,12 @@ data class LiveStats(
     val storageFree: Long,
     val battery: BatteryState?,
     val uptimeMs: Long,
+    val thermal: ThermalState,
 )
 
 class DeviceInfo(private val context: Context) {
     private val pm = context.packageManager
+    private val thermal = ThermalReader(context)
     private val mutex = Mutex()
     private var cached: StaticInfo? = null
 
@@ -172,11 +175,10 @@ class DeviceInfo(private val context: Context) {
             row("Version", "Android ${android.release}")
             row("Codename", android.codename)
             row("API level", android.sdkFull ?: android.sdk.toString())
-            row("Security patch", android.securityPatch)
-            row("Vendor security patch", formatIsoDate(SysProps["ro.vendor.build.security_patch"]))
             row("Google Play system update", packageVersion("com.google.android.modulemetadata")?.let { formatIsoDate(it.take(10)) })
             row("First API level", SysProps["ro.product.first_api_level"])
         },
+        securitySection(context),
         section("Build") {
             row("Build number", Build.DISPLAY)
             row("Build ID", Build.ID.takeIf { it != Build.DISPLAY })
@@ -190,14 +192,12 @@ class DeviceInfo(private val context: Context) {
             row("Architecture", System.getProperty("os.arch"))
             row("Build", readLine("/proc/version")?.substringAfter(") ")?.substringAfter(") ")?.takeIf { it.isNotBlank() })
             row("Runtime", System.getProperty("java.vm.version")?.let { "ART $it" })
-            row("SELinux", selinux())
         },
         section("Boot & partitions") {
             row("Project Treble", SysProps.bool("ro.treble.enabled").yesNo())
             row("Seamless updates (A/B)", SysProps.bool("ro.build.ab_update").yesNo())
             row("Current slot", SysProps["ro.boot.slot_suffix"]?.removePrefix("_")?.uppercase())
             row("Dynamic partitions", SysProps.bool("ro.boot.dynamic_partitions").yesNo())
-            row("Verified boot", SysProps["ro.boot.verifiedbootstate"]?.replaceFirstChar { it.uppercase() })
             row("Bootloader", Build.BOOTLOADER.takeIf { it != Build.UNKNOWN })
             row("Baseband", Build.getRadioVersion()?.split(',')?.first())
         },
@@ -206,11 +206,6 @@ class DeviceInfo(private val context: Context) {
             row("Time zone", TimeZone.getDefault().let { "${it.getDisplayName(false, TimeZone.LONG)} (${it.id})" })
         },
     )
-
-    private fun selinux(): String? {
-        readLine("/sys/fs/selinux/enforce")?.let { return if (it == "1") "Enforcing" else "Permissive" }
-        return runCommand("getenforce")
-    }
 
     private fun packageVersion(pkg: String): String? =
         runCatching { pm.getPackageInfo(pkg, 0).versionName }.getOrNull()
@@ -238,7 +233,7 @@ class DeviceInfo(private val context: Context) {
             row("Vulkan hardware level", gpu.vulkanLevel?.toString())
         },
         displaySection(),
-    )
+    ) + cameraSections(context) + listOfNotNull(storageSection(context))
 
     /** "(ANGLE 2.1 git hash: 8d87…)" → "ANGLE 2.1"; the hash means nothing to a reader. */
     private fun stripAngleHash(driver: String): String =
@@ -294,6 +289,31 @@ class DeviceInfo(private val context: Context) {
             row("Refresh rates", rates.joinToString(", ") { "$it Hz" })
             row("HDR", hdr.joinToString(", ").ifEmpty { "Not supported" })
             row("Wide color gamut", display.isWideColorGamut.yesNo())
+            row("Wide gamut color space", display.preferredWideGamutColorSpace?.name?.replace('_', ' '))
+            display.hdrCapabilities?.takeIf { hdr.isNotEmpty() }?.let { caps ->
+                row("HDR peak brightness", caps.desiredMaxLuminance.takeIf { it > 0 }?.let { "${it.roundToInt()} nits" })
+                row("HDR average brightness", caps.desiredMaxAverageLuminance.takeIf { it > 0 }?.let { "${it.roundToInt()} nits" })
+                row("HDR min brightness", caps.desiredMinLuminance.takeIf { it > 0 }?.let { String.format(Locale.getDefault(), "%.4f nits", it) })
+            }
+            if (Build.VERSION.SDK_INT >= 34 && display.isHdrSdrRatioAvailable) {
+                row("HDR/SDR ratio", String.format(Locale.getDefault(), "%.2f×", display.hdrSdrRatio))
+            }
+            row("Cutout", display.cutout?.boundingRects?.let { rects ->
+                when {
+                    rects.isEmpty() -> "None"
+                    rects.size == 1 && rects[0].width() < metrics.widthPixels / 3 -> "Punch hole"
+                    rects.size == 1 -> "Notch"
+                    else -> "${rects.size} cutouts"
+                }
+            } ?: "None")
+            if (Build.VERSION.SDK_INT >= 31) {
+                row("Rounded corners", display.getRoundedCorner(android.view.RoundedCorner.POSITION_TOP_LEFT)?.radius?.let { "$it px radius" } ?: "None")
+            }
+            if (Build.VERSION.SDK_INT >= 36) {
+                row("Adaptive refresh rate", display.hasArrSupport().yesNo())
+            }
+            row("Display modes", modes.size.toString())
+            row("Panel name", display.name)
         }
     }
 
@@ -309,7 +329,6 @@ class DeviceInfo(private val context: Context) {
             row("Hardware", Build.HARDWARE)
             row("Board", Build.BOARD)
         },
-        cameraSection(),
         section("Connectivity") {
             row("Wi-Fi standard", wifiStandard())
             row("Wi-Fi 6 GHz", wifi6Ghz().yesNo())
@@ -333,27 +352,6 @@ class DeviceInfo(private val context: Context) {
             row("Google Play Store", packageVersion("com.android.vending")?.substringBefore(' '))
         },
     )
-
-    private fun cameraSection(): InfoSection? {
-        val cm = context.getSystemService(CameraManager::class.java) ?: return null
-        val ids = runCatching { cm.cameraIdList.toList() }.getOrDefault(emptyList())
-        return section("Cameras") {
-            row("Cameras exposed", ids.size.toString())
-            for (id in ids) {
-                val ch = runCatching { cm.getCameraCharacteristics(id) }.getOrNull() ?: continue
-                val facing = when (ch.get(CameraCharacteristics.LENS_FACING)) {
-                    CameraCharacteristics.LENS_FACING_FRONT -> "Front"
-                    CameraCharacteristics.LENS_FACING_BACK -> "Rear"
-                    else -> "External"
-                }
-                val px = ch.get(CameraCharacteristics.SENSOR_INFO_PIXEL_ARRAY_SIZE)
-                val mp = px?.let { String.format(Locale.getDefault(), "%.1f MP", it.width * it.height / 1_000_000.0) }
-                val focal = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS)?.firstOrNull()
-                    ?.let { String.format(Locale.getDefault(), "%.1f mm", it) }
-                row("Camera $id ($facing)", listOfNotNull(mp, focal).joinToString(" · "))
-            }
-        }
-    }
 
     private fun sensorSection(): InfoSection? {
         val sm = context.getSystemService(SensorManager::class.java) ?: return null
@@ -418,6 +416,7 @@ class DeviceInfo(private val context: Context) {
             storageFree = stat.availableBytes,
             battery = battery(),
             uptimeMs = SystemClock.elapsedRealtime(),
+            thermal = thermal.read(),
         )
     }
 

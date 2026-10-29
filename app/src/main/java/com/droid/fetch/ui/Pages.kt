@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 Comma
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package com.droid.fetch.ui
 
 import androidx.compose.foundation.background
@@ -32,6 +35,7 @@ import com.droid.fetch.data.batterySection
 import com.droid.fetch.data.formatBytes
 import com.droid.fetch.data.formatKhz
 import com.droid.fetch.data.memorySection
+import com.droid.fetch.data.thermalSection
 import com.droid.fetch.data.uptimeSection
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
@@ -60,7 +64,7 @@ fun SystemPage(info: StaticInfo?, live: LiveStats?, onShare: () -> Unit) {
 }
 
 @Composable
-fun HardwarePage(info: StaticInfo?, live: LiveStats?, settings: AppSettings, onShare: () -> Unit) {
+fun HardwarePage(info: StaticInfo?, live: LiveStats?, storage: StorageUsage?, settings: AppSettings, onShare: () -> Unit) {
     PageScaffold(title = "Hardware", actions = { ShareAction(onShare) }) {
         if (info == null) return@PageScaffold
         if (live != null) {
@@ -86,9 +90,15 @@ fun HardwarePage(info: StaticInfo?, live: LiveStats?, settings: AppSettings, onS
             }
             item(key = "cpu") { CpuCard(info, live) }
         }
-        infoSections(info.hardware)
+        // The category breakdown sits right above the filesystem details it belongs with.
+        val (before, after) = info.hardware.partition { it.title != "Storage" }
+        infoSections(before)
+        storage?.let { item(key = "storage-usage") { StorageUsageCard(it) } }
+        infoSections(after)
         live?.memorySection()?.let { s -> item(key = "memory") { InfoSectionCard(s) } }
         live?.batterySection(settings.tempUnit)?.let { s -> item(key = "battery") { InfoSectionCard(s) } }
+        live?.let { l -> thermalSection(l.thermal, l.battery?.tempC, settings.tempUnit) }
+            ?.let { s -> item(key = "thermal") { InfoSectionCard(s) } }
     }
 }
 
